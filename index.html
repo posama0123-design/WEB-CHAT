@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Firebase Chat</title>
+    <title>Fixed Name & Image Chat</title>
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #e5ddd5; margin: 0; display: flex; justify-content: center; height: 100vh; }
         #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
@@ -14,32 +14,28 @@
         input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; font-size: 16px; outline: none; }
         button { padding: 12px; background: #25d366; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
         
-        /* フレンドリスト */
         .friend-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: white; }
-        .friend-item:hover { background: #f9f9f9; }
-
-        /* チャット吹き出し */
         .msg-list { display: flex; flex-direction: column; gap: 8px; }
-        .msg { padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 14px; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .msg { padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 14px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); word-break: break-all; }
         .msg.me { align-self: flex-end; background: #dcf8c6; border-top-right-radius: 2px; }
         .msg.other { align-self: flex-start; background: #fff; border-top-left-radius: 2px; }
+        .msg img { max-width: 100%; border-radius: 8px; margin-top: 5px; display: block; }
         .msg-info { font-size: 10px; color: #888; margin-top: 4px; display: block; text-align: right; }
 
         .chat-footer { display: flex; padding: 10px; background: #f0f0f0; border-top: 1px solid #ddd; }
         .chat-footer input { flex: 1; margin-bottom: 0; margin-right: 8px; }
-        
         .back-btn { position: absolute; left: 10px; top: 12px; background: none; border: 1px solid white; padding: 5px 10px; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div id="app">
-    <div id="screen-login" class="screen active">
-        <header>初期設定</header>
+    <div id="screen-login" class="screen">
+        <header>名前の登録（一度決めたら変えられません）</header>
         <div class="content" style="background: white; display: flex; flex-direction: column; justify-content: center;">
-            <p style="text-align: center; color: #666;">あなたの表示名を決めてください</p>
-            <input type="text" id="my-name-input" placeholder="例: 太郎">
-            <button onclick="login()">はじめる</button>
+            <p style="text-align: center; color: #d32f2f; font-weight: bold;">※この名前は一生変更できません。</p>
+            <input type="text" id="my-name-input" placeholder="あなたの名前...">
+            <button onclick="login()">この名前で一生行く</button>
         </div>
     </div>
 
@@ -61,7 +57,7 @@
         </header>
         <div class="content msg-list" id="msg-container"></div>
         <div class="chat-footer">
-            <input type="text" id="chat-input" placeholder="メッセージを入力...">
+            <input type="text" id="chat-input" placeholder="メッセージ、または画像URL...">
             <button onclick="sendMessage()">送信</button>
         </div>
     </div>
@@ -72,7 +68,6 @@
     import { getDatabase, ref, push, onChildAdded, serverTimestamp, off } 
         from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // --- あなたの設定を適用済み ---
     const firebaseConfig = {
         apiKey: "AIzaSyCAq7RfWRTYScs4cCVcnkRdmy5lSsuHYgU",
         authDomain: "my-chatapp-7a4db.firebaseapp.com",
@@ -87,24 +82,38 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    let myName = localStorage.getItem('chat_user') || "";
+    let myName = localStorage.getItem('chat_user_fixed') || ""; // 名前を別キーで保存
     let friends = JSON.parse(localStorage.getItem('chat_friends')) || [];
     let currentChatFriend = "";
     let chatRef = null;
 
-    if (myName) showFriends();
+    // 起動時のチェック
+    if (myName) {
+        showFriends();
+    } else {
+        document.getElementById('screen-login').classList.add('active');
+    }
 
-    // ログイン処理
+    // 名前設定（一度保存したら localStorage を消さない限り上書きさせない）
     window.login = () => {
         const val = document.getElementById('my-name-input').value.trim();
         if (val) {
-            myName = val;
-            localStorage.setItem('chat_user', myName);
-            showFriends();
+            if (confirm(val + " でよろしいですか？二度と変更できません。")) {
+                myName = val;
+                localStorage.setItem('chat_user_fixed', myName);
+                showFriends();
+            }
         }
     };
 
-    // フレンド追加
+    window.showFriends = () => {
+        if (chatRef) off(chatRef);
+        document.getElementById('display-my-name').innerText = myName;
+        switchScreen('screen-friends');
+        renderFriends();
+    };
+
+    // 以下、機能面
     window.addFriend = () => {
         const input = document.getElementById('friend-name-input');
         const fName = input.value.trim();
@@ -116,16 +125,9 @@
         }
     };
 
-    window.showFriends = () => {
-        if (chatRef) off(chatRef);
-        document.getElementById('display-my-name').innerText = myName;
-        switchScreen('screen-friends');
-        renderFriends();
-    };
-
     function renderFriends() {
         const container = document.getElementById('friend-list-container');
-        container.innerHTML = friends.length === 0 ? '<p style="padding:20px; color:#888; text-align:center;">友達を名前で追加してください</p>' : '';
+        container.innerHTML = friends.length === 0 ? '<p style="padding:20px; color:#888; text-align:center;">友達を追加してください</p>' : '';
         friends.forEach(f => {
             const div = document.createElement('div');
             div.className = 'friend-item';
@@ -135,16 +137,12 @@
         });
     }
 
-    // チャット開始
     function openChat(friendName) {
         currentChatFriend = friendName;
         document.getElementById('chat-title').innerText = friendName;
         switchScreen('screen-chat');
-        
         const container = document.getElementById('msg-container');
         container.innerHTML = "";
-
-        // 二人の名前を並び替えて固定のトークルームIDを作成
         const roomID = [myName, friendName].sort().join("_");
         chatRef = ref(db, `rooms/${roomID}`);
 
@@ -153,10 +151,15 @@
             const div = document.createElement('div');
             const isMe = data.sender === myName;
             div.className = `msg ${isMe ? 'me' : 'other'}`;
+            
+            // 画像URLかどうかを判定
+            const isImageUrl = data.text.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || data.text.startsWith('data:image');
+            const content = isImageUrl ? `<img src="${data.text}">` : data.text;
+            
             const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "";
             div.innerHTML = `
                 ${!isMe ? `<b style="font-size:10px; display:block; color:#075e54;">${data.sender}</b>` : ''}
-                ${data.text} 
+                ${content} 
                 <span class="msg-info">${time}</span>
             `;
             container.appendChild(div);
@@ -164,7 +167,6 @@
         });
     }
 
-    // メッセージ送信
     window.sendMessage = () => {
         const input = document.getElementById('chat-input');
         const text = input.value.trim();
