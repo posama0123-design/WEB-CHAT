@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Firebase Chat</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #e5ddd5; margin: 0; display: flex; justify-content: center; height: 100vh; }
+        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        header { background: #075e54; color: white; padding: 15px; text-align: center; font-size: 1.1em; font-weight: bold; position: relative; }
+        .screen { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+        .active { display: flex; }
+        .content { flex: 1; overflow-y: auto; padding: 15px; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); }
+        input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; font-size: 16px; outline: none; }
+        button { padding: 12px; background: #25d366; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        
+        /* フレンドリスト */
+        .friend-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: white; }
+        .friend-item:hover { background: #f9f9f9; }
+
+        /* チャット吹き出し */
+        .msg-list { display: flex; flex-direction: column; gap: 8px; }
+        .msg { padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 14px; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .msg.me { align-self: flex-end; background: #dcf8c6; border-top-right-radius: 2px; }
+        .msg.other { align-self: flex-start; background: #fff; border-top-left-radius: 2px; }
+        .msg-info { font-size: 10px; color: #888; margin-top: 4px; display: block; text-align: right; }
+
+        .chat-footer { display: flex; padding: 10px; background: #f0f0f0; border-top: 1px solid #ddd; }
+        .chat-footer input { flex: 1; margin-bottom: 0; margin-right: 8px; }
+        
+        .back-btn { position: absolute; left: 10px; top: 12px; background: none; border: 1px solid white; padding: 5px 10px; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="screen-login" class="screen active">
+        <header>初期設定</header>
+        <div class="content" style="background: white; display: flex; flex-direction: column; justify-content: center;">
+            <p style="text-align: center; color: #666;">あなたの表示名を決めてください</p>
+            <input type="text" id="my-name-input" placeholder="例: 太郎">
+            <button onclick="login()">はじめる</button>
+        </div>
+    </div>
+
+    <div id="screen-friends" class="screen">
+        <header>フレンド (<span id="display-my-name"></span>)</header>
+        <div class="content" style="background: #f0f2f5; padding: 0;">
+            <div style="padding: 15px; background: white; display: flex; gap: 5px; border-bottom: 1px solid #ddd;">
+                <input type="text" id="friend-name-input" placeholder="追加したい友達の名前..." style="flex: 1; margin-bottom: 0;">
+                <button onclick="addFriend()" style="padding: 5px 15px;">追加</button>
+            </div>
+            <div id="friend-list-container"></div>
+        </div>
+    </div>
+
+    <div id="screen-chat" class="screen">
+        <header>
+            <button class="back-btn" onclick="showFriends()">戻る</button>
+            <span id="chat-title">チャット</span>
+        </header>
+        <div class="content msg-list" id="msg-container"></div>
+        <div class="chat-footer">
+            <input type="text" id="chat-input" placeholder="メッセージを入力...">
+            <button onclick="sendMessage()">送信</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, push, onChildAdded, serverTimestamp, off } 
+        from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // --- あなたの設定を適用済み ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyCAq7RfWRTYScs4cCVcnkRdmy5lSsuHYgU",
+        authDomain: "my-chatapp-7a4db.firebaseapp.com",
+        databaseURL: "https://my-chatapp-7a4db-default-rtdb.firebaseio.com",
+        projectId: "my-chatapp-7a4db",
+        storageBucket: "my-chatapp-7a4db.firebasestorage.app",
+        messagingSenderId: "211651956147",
+        appId: "1:211651956147:web:fbd3b472e9ee6381460fc6",
+        measurementId: "G-TVQY9WKZM6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let myName = localStorage.getItem('chat_user') || "";
+    let friends = JSON.parse(localStorage.getItem('chat_friends')) || [];
+    let currentChatFriend = "";
+    let chatRef = null;
+
+    if (myName) showFriends();
+
+    // ログイン処理
+    window.login = () => {
+        const val = document.getElementById('my-name-input').value.trim();
+        if (val) {
+            myName = val;
+            localStorage.setItem('chat_user', myName);
+            showFriends();
+        }
+    };
+
+    // フレンド追加
+    window.addFriend = () => {
+        const input = document.getElementById('friend-name-input');
+        const fName = input.value.trim();
+        if (fName && fName !== myName && !friends.includes(fName)) {
+            friends.push(fName);
+            localStorage.setItem('chat_friends', JSON.stringify(friends));
+            input.value = "";
+            renderFriends();
+        }
+    };
+
+    window.showFriends = () => {
+        if (chatRef) off(chatRef);
+        document.getElementById('display-my-name').innerText = myName;
+        switchScreen('screen-friends');
+        renderFriends();
+    };
+
+    function renderFriends() {
+        const container = document.getElementById('friend-list-container');
+        container.innerHTML = friends.length === 0 ? '<p style="padding:20px; color:#888; text-align:center;">友達を名前で追加してください</p>' : '';
+        friends.forEach(f => {
+            const div = document.createElement('div');
+            div.className = 'friend-item';
+            div.innerHTML = `<span>${f}</span><span style="color:#25d366">●</span>`;
+            div.onclick = () => openChat(f);
+            container.appendChild(div);
+        });
+    }
+
+    // チャット開始
+    function openChat(friendName) {
+        currentChatFriend = friendName;
+        document.getElementById('chat-title').innerText = friendName;
+        switchScreen('screen-chat');
+        
+        const container = document.getElementById('msg-container');
+        container.innerHTML = "";
+
+        // 二人の名前を並び替えて固定のトークルームIDを作成
+        const roomID = [myName, friendName].sort().join("_");
+        chatRef = ref(db, `rooms/${roomID}`);
+
+        onChildAdded(chatRef, (snapshot) => {
+            const data = snapshot.val();
+            const div = document.createElement('div');
+            const isMe = data.sender === myName;
+            div.className = `msg ${isMe ? 'me' : 'other'}`;
+            const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "";
+            div.innerHTML = `
+                ${!isMe ? `<b style="font-size:10px; display:block; color:#075e54;">${data.sender}</b>` : ''}
+                ${data.text} 
+                <span class="msg-info">${time}</span>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        });
+    }
+
+    // メッセージ送信
+    window.sendMessage = () => {
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if (text && currentChatFriend) {
+            const roomID = [myName, currentChatFriend].sort().join("_");
+            push(ref(db, `rooms/${roomID}`), {
+                sender: myName,
+                text: text,
+                timestamp: serverTimestamp()
+            });
+            input.value = "";
+        }
+    };
+
+    function switchScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+</script>
+
+</body>
+</html>
