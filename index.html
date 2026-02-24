@@ -3,62 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fixed Name & Image Chat</title>
+    <title>KTTYチャットサービス</title>
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #e5ddd5; margin: 0; display: flex; justify-content: center; height: 100vh; }
-        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        header { background: #075e54; color: white; padding: 15px; text-align: center; font-size: 1.1em; font-weight: bold; position: relative; }
+        /* 全身ブラックのデザイン */
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; color: #fff; margin: 0; display: flex; justify-content: center; height: 100vh; }
+        #app { width: 100%; max-width: 500px; background: #121212; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(255,255,255,0.1); }
+        
+        header { background: #1f1f1f; color: #fff; padding: 15px; text-align: center; font-size: 1.2em; font-weight: bold; border-bottom: 1px solid #333; position: relative; }
         .screen { display: none; flex-direction: column; height: 100%; overflow: hidden; }
         .active { display: flex; }
-        .content { flex: 1; overflow-y: auto; padding: 15px; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); }
-        input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; font-size: 16px; outline: none; }
-        button { padding: 12px; background: #25d366; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
         
-        .friend-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: white; }
-        .msg-list { display: flex; flex-direction: column; gap: 8px; }
-        .msg { padding: 8px 12px; border-radius: 12px; max-width: 75%; font-size: 14px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); word-break: break-all; }
-        .msg.me { align-self: flex-end; background: #dcf8c6; border-top-right-radius: 2px; }
-        .msg.other { align-self: flex-start; background: #fff; border-top-left-radius: 2px; }
-        .msg img { max-width: 100%; border-radius: 8px; margin-top: 5px; display: block; }
-        .msg-info { font-size: 10px; color: #888; margin-top: 4px; display: block; text-align: right; }
+        /* コンテンツエリア */
+        .content { flex: 1; overflow-y: auto; padding: 15px; background: #000; }
+        
+        /* 入力エリア・ボタン */
+        input { padding: 12px; border: 1px solid #444; border-radius: 8px; margin-bottom: 10px; font-size: 16px; outline: none; background: #222; color: #fff; }
+        button { padding: 12px; background: #444; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #666; }
+        
+        /* フレンドリスト */
+        .friend-item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #121212; }
+        .friend-item:hover { background: #1f1f1f; }
 
-        .chat-footer { display: flex; padding: 10px; background: #f0f0f0; border-top: 1px solid #ddd; }
-        .chat-footer input { flex: 1; margin-bottom: 0; margin-right: 8px; }
-        .back-btn { position: absolute; left: 10px; top: 12px; background: none; border: 1px solid white; padding: 5px 10px; font-size: 12px; }
+        /* チャット吹き出し（ダーク仕様） */
+        .msg-list { display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 10px 14px; border-radius: 18px; max-width: 80%; font-size: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); word-break: break-all; }
+        .msg.me { align-self: flex-end; background: #333; color: #fff; border-bottom-right-radius: 2px; }
+        .msg.other { align-self: flex-start; background: #1f1f1f; color: #ddd; border-bottom-left-radius: 2px; border: 1px solid #333; }
+        .msg img { max-width: 100%; border-radius: 10px; margin-top: 8px; display: block; }
+        .msg-info { font-size: 10px; color: #666; margin-top: 5px; display: block; text-align: right; }
+
+        /* フッター */
+        .chat-footer { display: flex; padding: 12px; background: #121212; border-top: 1px solid #333; }
+        .chat-footer input { flex: 1; margin-bottom: 0; margin-right: 10px; border-radius: 20px; padding-left: 15px; }
+        .back-btn { position: absolute; left: 10px; top: 12px; background: none; border: 1px solid #555; padding: 4px 10px; font-size: 12px; color: #ccc; }
     </style>
 </head>
 <body>
 
 <div id="app">
     <div id="screen-login" class="screen">
-        <header>名前の登録（一度決めたら変えられません）</header>
-        <div class="content" style="background: white; display: flex; flex-direction: column; justify-content: center;">
-            <p style="text-align: center; color: #d32f2f; font-weight: bold;">※この名前は一生変更できません。</p>
-            <input type="text" id="my-name-input" placeholder="あなたの名前...">
-            <button onclick="login()">この名前で一生行く</button>
+        <header>KTTYチャットサービス</header>
+        <div class="content" style="display: flex; flex-direction: column; justify-content: center;">
+            <p style="text-align: center; color: #aaa;">利用を開始するには名前を登録してください。</p>
+            <p style="text-align: center; color: #ff4444; font-size: 0.8em;">※一度登録すると変更できません</p>
+            <input type="text" id="my-name-input" placeholder="名前を入力...">
+            <button onclick="login()">この名前で登録する</button>
         </div>
     </div>
 
     <div id="screen-friends" class="screen">
-        <header>フレンド (<span id="display-my-name"></span>)</header>
-        <div class="content" style="background: #f0f2f5; padding: 0;">
-            <div style="padding: 15px; background: white; display: flex; gap: 5px; border-bottom: 1px solid #ddd;">
-                <input type="text" id="friend-name-input" placeholder="追加したい友達の名前..." style="flex: 1; margin-bottom: 0;">
-                <button onclick="addFriend()" style="padding: 5px 15px;">追加</button>
+        <header>KTTY フレンドリスト</header>
+        <div class="content" style="padding: 0;">
+            <div style="padding: 15px; background: #121212; display: flex; gap: 8px; border-bottom: 1px solid #333;">
+                <input type="text" id="friend-name-input" placeholder="友達を探す..." style="flex: 1; margin-bottom: 0;">
+                <button onclick="addFriend()">追加</button>
             </div>
             <div id="friend-list-container"></div>
+            <div style="padding: 10px; text-align: center; font-size: 0.8em; color: #444;">あなたの名前: <span id="display-my-name"></span></div>
         </div>
     </div>
 
     <div id="screen-chat" class="screen">
         <header>
-            <button class="back-btn" onclick="showFriends()">戻る</button>
+            <button class="back-btn" onclick="showFriends()">← 戻る</button>
             <span id="chat-title">チャット</span>
         </header>
         <div class="content msg-list" id="msg-container"></div>
         <div class="chat-footer">
-            <input type="text" id="chat-input" placeholder="メッセージ、または画像URL...">
-            <button onclick="sendMessage()">送信</button>
+            <input type="text" id="chat-input" placeholder="メッセージ、画像URL...">
+            <button onclick="sendMessage()" style="background: #007aff;">送信</button>
         </div>
     </div>
 </div>
@@ -68,6 +82,7 @@
     import { getDatabase, ref, push, onChildAdded, serverTimestamp, off } 
         from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
+    // Firebase設定
     const firebaseConfig = {
         apiKey: "AIzaSyCAq7RfWRTYScs4cCVcnkRdmy5lSsuHYgU",
         authDomain: "my-chatapp-7a4db.firebaseapp.com",
@@ -82,25 +97,23 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    let myName = localStorage.getItem('chat_user_fixed') || ""; // 名前を別キーで保存
-    let friends = JSON.parse(localStorage.getItem('chat_friends')) || [];
+    let myName = localStorage.getItem('chat_user_fixed_ktty') || "";
+    let friends = JSON.parse(localStorage.getItem('chat_friends_ktty')) || [];
     let currentChatFriend = "";
     let chatRef = null;
 
-    // 起動時のチェック
     if (myName) {
         showFriends();
     } else {
         document.getElementById('screen-login').classList.add('active');
     }
 
-    // 名前設定（一度保存したら localStorage を消さない限り上書きさせない）
     window.login = () => {
         const val = document.getElementById('my-name-input').value.trim();
         if (val) {
-            if (confirm(val + " でよろしいですか？二度と変更できません。")) {
+            if (confirm("名前を「" + val + "」に設定します。\nこの操作は一生やり直せません。よろしいですか？")) {
                 myName = val;
-                localStorage.setItem('chat_user_fixed', myName);
+                localStorage.setItem('chat_user_fixed_ktty', myName);
                 showFriends();
             }
         }
@@ -113,13 +126,12 @@
         renderFriends();
     };
 
-    // 以下、機能面
     window.addFriend = () => {
         const input = document.getElementById('friend-name-input');
         const fName = input.value.trim();
         if (fName && fName !== myName && !friends.includes(fName)) {
             friends.push(fName);
-            localStorage.setItem('chat_friends', JSON.stringify(friends));
+            localStorage.setItem('chat_friends_ktty', JSON.stringify(friends));
             input.value = "";
             renderFriends();
         }
@@ -127,11 +139,11 @@
 
     function renderFriends() {
         const container = document.getElementById('friend-list-container');
-        container.innerHTML = friends.length === 0 ? '<p style="padding:20px; color:#888; text-align:center;">友達を追加してください</p>' : '';
+        container.innerHTML = friends.length === 0 ? '<p style="padding:40px; color:#444; text-align:center;">まだフレンドが登録されていません</p>' : '';
         friends.forEach(f => {
             const div = document.createElement('div');
             div.className = 'friend-item';
-            div.innerHTML = `<span>${f}</span><span style="color:#25d366">●</span>`;
+            div.innerHTML = `<span>${f}</span><span style="color:#007aff; font-size:12px;">トークへ ＞</span>`;
             div.onclick = () => openChat(f);
             container.appendChild(div);
         });
@@ -152,13 +164,12 @@
             const isMe = data.sender === myName;
             div.className = `msg ${isMe ? 'me' : 'other'}`;
             
-            // 画像URLかどうかを判定
-            const isImageUrl = data.text.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || data.text.startsWith('data:image');
+            const isImageUrl = data.text.match(/\.(jpeg|jpg|gif|png|webp|avif)$/i) != null || data.text.startsWith('data:image');
             const content = isImageUrl ? `<img src="${data.text}">` : data.text;
             
             const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "";
             div.innerHTML = `
-                ${!isMe ? `<b style="font-size:10px; display:block; color:#075e54;">${data.sender}</b>` : ''}
+                ${!isMe ? `<b style="font-size:10px; display:block; color:#888; margin-bottom:4px;">${data.sender}</b>` : ''}
                 ${content} 
                 <span class="msg-info">${time}</span>
             `;
