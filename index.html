@@ -3,38 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KTCA</title>
+    <title>KTTY - Chat & Call (Final)</title>
     <style>
-        /* スタイルはホワイトテーマを維持 */
+        /* 全体設定：白を基調に */
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; color: #1a1a1a; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
         #app { width: 100%; max-width: 500px; background: #ffffff; display: flex; flex-direction: column; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
+        
         header { background: #ffffff; color: #1a1a1a; padding: 18px; text-align: center; font-size: 1.1em; font-weight: bold; border-bottom: 1px solid #f0f0f0; position: relative; }
         .screen { display: none; flex-direction: column; height: 100%; width: 100%; }
         .active { display: flex; }
         .content { flex: 1; overflow-y: auto; padding: 15px; background: #ffffff; }
+        
         input { padding: 14px; border: 1px solid #ddd; border-radius: 10px; margin-bottom: 12px; font-size: 16px; outline: none; background: #f9f9f9; color: #333; }
         button { padding: 14px; background: #007aff; color: #fff; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        
         .friend-item { padding: 18px; border-bottom: 1px solid #f0f0f0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .msg-list { display: flex; flex-direction: column; gap: 12px; }
         .msg { padding: 10px 16px; border-radius: 18px; max-width: 75%; font-size: 15px; word-break: break-all; }
         .msg.me { align-self: flex-end; background: #007aff; color: #fff; border-bottom-right-radius: 2px; }
         .msg.other { align-self: flex-start; background: #e9e9eb; color: #1a1a1a; border-bottom-left-radius: 2px; }
+        
         .chat-footer { display: flex; padding: 15px; background: #ffffff; border-top: 1px solid #f0f0f0; }
         .chat-footer input { flex: 1; margin: 0 10px 0 0; border-radius: 25px; background: #f0f2f5; border: none; }
-        
+
+        /* --- LINE風通話画面 --- */
         #call-screen {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(180deg, #ffffff 0%, #f0f2f5 100%); z-index: 9999;
-            flex-direction: column; align-items: center; justify-content: space-around;
+            background: #ffffff; z-index: 9999;
+            flex-direction: column; align-items: center; justify-content: space-between;
+            padding: 80px 0 100px 0; box-sizing: border-box;
         }
-        .call-user-name { font-size: 2.2em; color: #1a1a1a; margin-bottom: 10px; }
-        .call-status { color: #2ecc71; letter-spacing: 2px; font-weight: bold; animation: blink 1.5s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-        .call-btns { display: flex; gap: 30px; }
-        .btn-circle { width: 70px; height: 70px; border-radius: 50%; border: none; cursor: pointer; font-size: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .btn-answer { background: #2ecc71; color: #fff; }
+        .call-avatar { width: 120px; height: 120px; background: #f0f2f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #ccc; margin-bottom: 20px; }
+        .call-user-name { font-size: 2em; color: #1a1a1a; font-weight: bold; margin: 0; }
+        .call-status { color: #888; font-size: 1.1em; margin-top: 10px; }
+        #call-timer { display: none; color: #1a1a1a; font-size: 1.3em; margin-top: 10px; font-weight: 500; }
+        
+        .call-btns { display: flex; gap: 30px; align-items: center; }
+        .btn-circle { width: 70px; height: 70px; border-radius: 50%; border: none; cursor: pointer; font-size: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.1s; }
+        .btn-circle:active { transform: scale(0.9); }
+        .btn-answer { background: #5cb85c; color: #fff; } /* LINE Green */
         .btn-hangup { background: #ff3b30; color: #fff; }
-        .btn-mute { background: #a0a0a0; color: #fff; }
+        .btn-mute { background: #f0f2f5; color: #1a1a1a; font-size: 22px; }
+        
         .icon-btn { background: none !important; color: #007aff !important; font-size: 20px; }
     </style>
 </head>
@@ -77,9 +87,11 @@
 </div>
 
 <div id="call-screen">
-    <div class="call-user-info">
+    <div class="call-user-info" style="display: flex; flex-direction: column; align-items: center;">
+        <div class="call-avatar">👤</div>
         <div id="call-target-display" class="call-user-name">Unknown</div>
-        <div id="call-status-text" class="call-status">Calling...</div>
+        <div id="call-status-text" class="call-status">呼び出し中...</div>
+        <div id="call-timer">00:00</div>
     </div>
     <div class="call-btns">
         <button id="mute-btn" class="btn-circle btn-mute" onclick="toggleMute()">🎤</button>
@@ -115,14 +127,9 @@
     let pc = null;
     let localStream = null;
     let isMuted = false;
+    let timerInterval = null;
 
-    // WebRTC 設定
-    const iceConfig = { 
-        iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            // 遠くの人と繋ぐにはここにMeteredなどのTURNサーバ情報を追加してください
-        ] 
-    };
+    const iceConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
     function init() {
         if (myName) {
@@ -133,7 +140,24 @@
         }
     }
 
-    // --- WebRTC 通話ロジック (A側: 発信) ---
+    // --- タイマー機能 ---
+    function startTimer() {
+        clearInterval(timerInterval);
+        let sec = 0;
+        const timerLabel = document.getElementById('call-timer');
+        const statusLabel = document.getElementById('call-status-text');
+        timerLabel.style.display = 'block';
+        statusLabel.style.display = 'none';
+        
+        timerInterval = setInterval(() => {
+            sec++;
+            const m = String(Math.floor(sec / 60)).padStart(2, '0');
+            const s = String(sec % 60).padStart(2, '0');
+            timerLabel.innerText = `${m}:${s}`;
+        }, 1000);
+    }
+
+    // --- WebRTC 通話ロジック ---
     window.startCall = async () => {
         if (!currentChatFriend) return;
         setupCallUI(currentChatFriend, "呼び出し中...");
@@ -142,53 +166,40 @@
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             pc = new RTCPeerConnection(iceConfig);
-            
-            // 自分の音声をセット
             localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-            // 経路候補が見つかったらFirebaseに送る
             pc.onicecandidate = (e) => {
-                if (e.candidate) {
-                    push(ref(db, `calls/${currentChatFriend}/candidates`), e.candidate.toJSON());
-                }
+                if (e.candidate) push(ref(db, `calls/${currentChatFriend}/candidates`), e.candidate.toJSON());
             };
 
-            // 相手の音声が届いたら再生
             pc.ontrack = (e) => {
                 document.getElementById('remote-audio').srcObject = e.streams[0];
+                startTimer(); // 相手の音声が届いたらタイマー開始
             };
 
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            
             await set(ref(db, `calls/${currentChatFriend}`), {
                 from: myName,
                 offer: { type: offer.type, sdp: offer.sdp },
                 timestamp: serverTimestamp()
             });
 
-            // 相手からのAnswerを待つ
             onValue(ref(db, `calls/${currentChatFriend}/answer`), async (snap) => {
                 const answer = snap.val();
                 if (answer && pc.signalingState !== "stable") {
                     await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                    document.getElementById('call-status-text').innerText = "通話中";
                 }
             });
 
-            // 相手からのICE Candidateを登録する
             onChildAdded(ref(db, `calls/${myName}/candidates`), (snap) => {
-                if (pc) pc.addIceCandidate(new RTCIceCandidate(snap.val()));
+                if (pc) pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
             });
-
         } catch (err) {
-            console.error(err);
-            alert("通話を開始できませんでした");
             stopCall();
         }
     };
 
-    // --- WebRTC 通話ロジック (B側: 着信) ---
     function listenForCalls() {
         onValue(ref(db, `calls/${myName}`), async (snap) => {
             const data = snap.val();
@@ -200,28 +211,21 @@
                     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     pc = new RTCPeerConnection(iceConfig);
                     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
                     pc.onicecandidate = (e) => {
-                        if (e.candidate) {
-                            push(ref(db, `calls/${data.from}/candidates`), e.candidate.toJSON());
-                        }
+                        if (e.candidate) push(ref(db, `calls/${data.from}/candidates`), e.candidate.toJSON());
                     };
-
                     pc.ontrack = (e) => {
                         document.getElementById('remote-audio').srcObject = e.streams[0];
+                        startTimer();
                     };
-
-                    // 相手からのICE Candidateを登録
                     onChildAdded(ref(db, `calls/${myName}/candidates`), (snap) => {
-                        if (pc) pc.addIceCandidate(new RTCIceCandidate(snap.val()));
+                        if (pc) pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
                     });
 
                     await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
-
                     await set(ref(db, `calls/${myName}/answer`), { type: answer.type, sdp: answer.sdp });
-                    document.getElementById('call-status-text').innerText = "通話中";
                     document.getElementById('answer-btn').style.display = 'none';
                 };
             } else if (!data && pc) {
@@ -230,14 +234,13 @@
         });
     }
 
-    // 消音の切り替え
     window.toggleMute = () => {
         if (localStream) {
             isMuted = !isMuted;
             localStream.getAudioTracks()[0].enabled = !isMuted;
             const btn = document.getElementById('mute-btn');
             btn.innerText = isMuted ? "🔇" : "🎤";
-            btn.style.background = isMuted ? "#ff9500" : "#a0a0a0";
+            btn.style.background = isMuted ? "#ff9500" : "#f0f2f5";
         }
     };
 
@@ -250,9 +253,13 @@
     function stopCall() {
         if (pc) { pc.close(); pc = null; }
         if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+        clearInterval(timerInterval);
         isMuted = false;
         document.getElementById('mute-btn').innerText = "🎤";
-        document.getElementById('mute-btn').style.background = "#a0a0a0";
+        document.getElementById('mute-btn').style.background = "#f0f2f5";
+        document.getElementById('call-timer').style.display = 'none';
+        document.getElementById('call-timer').innerText = "00:00";
+        document.getElementById('call-status-text').style.display = 'block';
         document.getElementById('call-screen').style.display = 'none';
     }
 
@@ -262,7 +269,7 @@
         document.getElementById('call-status-text').innerText = status;
     }
 
-    // --- その他UIロジック (login, addFriendなどはそのまま) ---
+    // --- チャット・フレンド機能 ---
     window.login = () => {
         const val = document.getElementById('my-name-input').value.trim();
         if (val) {
