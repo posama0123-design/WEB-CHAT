@@ -2,11 +2,28 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>KTTY - Chat & Call (Stable)</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KTTY">
+    <link rel="apple-touch-icon" href="icon.png">
+
     <style>
-        /* デザイン設定 */
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; color: #1a1a1a; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
+        body { 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            background: #f0f2f5; 
+            color: #1a1a1a; 
+            margin: 0; 
+            display: flex; 
+            justify-content: center; 
+            height: 100vh; 
+            overflow: hidden; 
+            /* フル画面時の時計重なり防止 */
+            padding-top: env(safe-area-inset-top);
+            box-sizing: border-box;
+        }
         #app { width: 100%; max-width: 500px; background: #ffffff; display: flex; flex-direction: column; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
         header { background: #ffffff; color: #1a1a1a; padding: 18px; text-align: center; font-size: 1.1em; font-weight: bold; border-bottom: 1px solid #f0f0f0; position: relative; }
         .screen { display: none; flex-direction: column; height: 100%; width: 100%; }
@@ -19,10 +36,16 @@
         .msg { padding: 10px 16px; border-radius: 18px; max-width: 75%; font-size: 15px; word-break: break-all; }
         .msg.me { align-self: flex-end; background: #007aff; color: #fff; border-bottom-right-radius: 2px; }
         .msg.other { align-self: flex-start; background: #e9e9eb; color: #1a1a1a; border-bottom-left-radius: 2px; }
-        .chat-footer { display: flex; padding: 15px; background: #ffffff; border-top: 1px solid #f0f0f0; }
+        .chat-footer { 
+            display: flex; 
+            padding: 15px; 
+            /* 下端バーとの重なり防止 */
+            padding-bottom: calc(15px + env(safe-area-inset-bottom));
+            background: #ffffff; 
+            border-top: 1px solid #f0f0f0; 
+        }
         .chat-footer input { flex: 1; margin: 0 10px 0 0; border-radius: 25px; background: #f0f2f5; border: none; }
 
-        /* 通話画面 */
         #call-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #ffffff; z-index: 9999; flex-direction: column; align-items: center; justify-content: space-between; padding: 80px 0 100px 0; box-sizing: border-box; }
         .call-avatar { width: 120px; height: 120px; background: #f0f2f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #ccc; margin-bottom: 20px; }
         .call-user-name { font-size: 2em; color: #1a1a1a; font-weight: bold; margin: 0; }
@@ -126,14 +149,13 @@
         ] 
     };
 
-    // --- マイク許可の事前要求 ---
     async function requestMicPermission() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(t => t.stop()); // 許可だけ取って止める
+            stream.getTracks().forEach(t => t.stop());
             return true;
         } catch (e) {
-            alert("マイクを許可しないと通話できません。ブラウザの設定を確認してください。");
+            alert("マイク許可が必要です。");
             return false;
         }
     }
@@ -163,26 +185,21 @@
         }, 1000);
     }
 
-    // --- 通話ロジック ---
     window.startCall = async () => {
         if (!currentChatFriend) return;
         setupCallUI(currentChatFriend, "呼び出し中...");
         document.getElementById('answer-btn').style.display = 'none';
-
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             pc = new RTCPeerConnection(iceConfig);
             localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
             pc.onicecandidate = (e) => {
                 if (e.candidate) push(ref(db, `calls/${currentChatFriend}/candidates`), e.candidate.toJSON());
             };
-
             pc.ontrack = (e) => {
                 document.getElementById('remote-audio').srcObject = e.streams[0];
                 startTimer();
             };
-
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             await set(ref(db, `calls/${currentChatFriend}`), {
@@ -190,14 +207,12 @@
                 offer: { type: offer.type, sdp: offer.sdp },
                 timestamp: serverTimestamp()
             });
-
             onValue(ref(db, `calls/${currentChatFriend}/answer`), async (snap) => {
                 const answer = snap.val();
                 if (answer && pc && pc.signalingState !== "stable") {
                     await pc.setRemoteDescription(new RTCSessionDescription(answer));
                 }
             });
-
             onChildAdded(ref(db, `calls/${myName}/candidates`), (snap) => {
                 if (pc && pc.remoteDescription) pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
             });
@@ -210,12 +225,10 @@
             if (data && data.offer && !pc) {
                 setupCallUI(data.from, "着信中...");
                 document.getElementById('answer-btn').style.display = 'flex';
-                
                 window.handleAnswer = async () => {
                     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     pc = new RTCPeerConnection(iceConfig);
                     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-                    
                     pc.onicecandidate = (e) => {
                         if (e.candidate) push(ref(db, `calls/${data.from}/candidates`), e.candidate.toJSON());
                     };
@@ -223,16 +236,13 @@
                         document.getElementById('remote-audio').srcObject = e.streams[0];
                         startTimer();
                     };
-
                     await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
                     await set(ref(db, `calls/${myName}/answer`), { type: answer.type, sdp: answer.sdp });
-                    
                     onChildAdded(ref(db, `calls/${myName}/candidates`), (snap) => {
                         if (pc && pc.remoteDescription) pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
                     });
-
                     document.getElementById('answer-btn').style.display = 'none';
                 };
             } else if (!data && pc) { stopCall(); }
@@ -274,7 +284,6 @@
         document.getElementById('call-status-text').innerText = status;
     }
 
-    // --- チャット・フレンド機能 ---
     window.login = async () => {
         const val = document.getElementById('my-name-input').value.trim();
         if (val) {
