@@ -1,0 +1,17 @@
+{
+  "name": "KTTY Chat & Call",
+  "short_name": "KTTY",
+  "description": "Simple Chat and WebRTC Call App",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007aff",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/5968/5968771.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
