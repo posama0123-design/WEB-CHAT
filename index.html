@@ -2,28 +2,11 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>KTTY</title>
-
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="KTTY">
-    <link rel="apple-touch-icon" href="icon.png">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KTTY - Chat & Call (Secure Name)</title>
     <style>
-        body { 
-            font-family: 'Helvetica Neue', Arial, sans-serif; 
-            background: #f0f2f5; 
-            color: #1a1a1a; 
-            margin: 0; 
-            display: flex; 
-            justify-content: center; 
-            height: 100vh; 
-            overflow: hidden; 
-            /* フル画面時の時計重なり防止 */
-            padding-top: env(safe-area-inset-top);
-            box-sizing: border-box;
-        }
+        /* デザイン設定 */
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; color: #1a1a1a; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
         #app { width: 100%; max-width: 500px; background: #ffffff; display: flex; flex-direction: column; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
         header { background: #ffffff; color: #1a1a1a; padding: 18px; text-align: center; font-size: 1.1em; font-weight: bold; border-bottom: 1px solid #f0f0f0; position: relative; }
         .screen { display: none; flex-direction: column; height: 100%; width: 100%; }
@@ -31,21 +14,16 @@
         .content { flex: 1; overflow-y: auto; padding: 15px; background: #ffffff; }
         input { padding: 14px; border: 1px solid #ddd; border-radius: 10px; margin-bottom: 12px; font-size: 16px; outline: none; background: #f9f9f9; color: #333; }
         button { padding: 14px; background: #007aff; color: #fff; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        button:disabled { background: #ccc; }
         .friend-item { padding: 18px; border-bottom: 1px solid #f0f0f0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .msg-list { display: flex; flex-direction: column; gap: 12px; }
         .msg { padding: 10px 16px; border-radius: 18px; max-width: 75%; font-size: 15px; word-break: break-all; }
         .msg.me { align-self: flex-end; background: #007aff; color: #fff; border-bottom-right-radius: 2px; }
         .msg.other { align-self: flex-start; background: #e9e9eb; color: #1a1a1a; border-bottom-left-radius: 2px; }
-        .chat-footer { 
-            display: flex; 
-            padding: 15px; 
-            /* 下端バーとの重なり防止 */
-            padding-bottom: calc(15px + env(safe-area-inset-bottom));
-            background: #ffffff; 
-            border-top: 1px solid #f0f0f0; 
-        }
+        .chat-footer { display: flex; padding: 15px; background: #ffffff; border-top: 1px solid #f0f0f0; }
         .chat-footer input { flex: 1; margin: 0 10px 0 0; border-radius: 25px; background: #f0f2f5; border: none; }
 
+        /* 通話画面 */
         #call-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #ffffff; z-index: 9999; flex-direction: column; align-items: center; justify-content: space-between; padding: 80px 0 100px 0; box-sizing: border-box; }
         .call-avatar { width: 120px; height: 120px; background: #f0f2f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 60px; color: #ccc; margin-bottom: 20px; }
         .call-user-name { font-size: 2em; color: #1a1a1a; font-weight: bold; margin: 0; }
@@ -68,7 +46,7 @@
         <div class="content" style="justify-content: center; display: flex; flex-direction: column;">
             <p style="text-align: center; color: #666; margin-bottom: 20px;">通話にはマイクの許可が必要です</p>
             <input type="text" id="my-name-input" placeholder="User Name">
-            <button onclick="login()">この名前で開始</button>
+            <button id="login-btn" onclick="login()">この名前で開始</button>
         </div>
     </div>
 
@@ -115,7 +93,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, push, onChildAdded, set, onValue, remove, serverTimestamp, off } 
+    import { getDatabase, ref, push, onChildAdded, set, onValue, remove, serverTimestamp, off, get } 
         from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
     const firebaseConfig = {
@@ -155,7 +133,7 @@
             stream.getTracks().forEach(t => t.stop());
             return true;
         } catch (e) {
-            alert("マイク許可が必要です。");
+            alert("マイクを許可しないと通話できません。ブラウザの設定を確認してください。");
             return false;
         }
     }
@@ -169,6 +147,48 @@
             switchScreen('screen-login');
         }
     }
+
+    // --- 修正: 重複チェック付きログイン ---
+    window.login = async () => {
+        const input = document.getElementById('my-name-input');
+        const btn = document.getElementById('login-btn');
+        const val = input.value.trim();
+        
+        if (!val) return;
+        
+        btn.disabled = true;
+        btn.innerText = "確認中...";
+
+        try {
+            // usersノードにその名前が既にあるかチェック
+            const userRef = ref(db, `users/${val}`);
+            const snapshot = await get(userRef);
+
+            if (snapshot.exists()) {
+                // 既に存在する場合
+                alert("このユーザー名は既に使用されています！！");
+                btn.disabled = false;
+                btn.innerText = "この名前で開始";
+            } else {
+                // 未使用の場合、名前を確保してログイン
+                await set(userRef, {
+                    registeredAt: serverTimestamp()
+                });
+                
+                myName = val;
+                localStorage.setItem('ktty_user_fixed', myName);
+                const ok = await requestMicPermission();
+                if(ok) init();
+            }
+        } catch (err) {
+            console.error(err);
+            alert("通信エラーが発生しました。");
+            btn.disabled = false;
+            btn.innerText = "この名前で開始";
+        }
+    };
+
+    // --- 以下、既存の通話・チャットロジック ---
 
     function startTimer() {
         clearInterval(timerInterval);
@@ -189,17 +209,21 @@
         if (!currentChatFriend) return;
         setupCallUI(currentChatFriend, "呼び出し中...");
         document.getElementById('answer-btn').style.display = 'none';
+
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             pc = new RTCPeerConnection(iceConfig);
             localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
             pc.onicecandidate = (e) => {
                 if (e.candidate) push(ref(db, `calls/${currentChatFriend}/candidates`), e.candidate.toJSON());
             };
+
             pc.ontrack = (e) => {
                 document.getElementById('remote-audio').srcObject = e.streams[0];
                 startTimer();
             };
+
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             await set(ref(db, `calls/${currentChatFriend}`), {
@@ -207,12 +231,14 @@
                 offer: { type: offer.type, sdp: offer.sdp },
                 timestamp: serverTimestamp()
             });
+
             onValue(ref(db, `calls/${currentChatFriend}/answer`), async (snap) => {
                 const answer = snap.val();
                 if (answer && pc && pc.signalingState !== "stable") {
                     await pc.setRemoteDescription(new RTCSessionDescription(answer));
                 }
             });
+
             onChildAdded(ref(db, `calls/${myName}/candidates`), (snap) => {
                 if (pc && pc.remoteDescription) pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
             });
@@ -225,10 +251,12 @@
             if (data && data.offer && !pc) {
                 setupCallUI(data.from, "着信中...");
                 document.getElementById('answer-btn').style.display = 'flex';
+                
                 window.handleAnswer = async () => {
                     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     pc = new RTCPeerConnection(iceConfig);
                     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                    
                     pc.onicecandidate = (e) => {
                         if (e.candidate) push(ref(db, `calls/${data.from}/candidates`), e.candidate.toJSON());
                     };
@@ -236,13 +264,16 @@
                         document.getElementById('remote-audio').srcObject = e.streams[0];
                         startTimer();
                     };
+
                     await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
                     await set(ref(db, `calls/${myName}/answer`), { type: answer.type, sdp: answer.sdp });
+                    
                     onChildAdded(ref(db, `calls/${myName}/candidates`), (snap) => {
                         if (pc && pc.remoteDescription) pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(() => {});
                     });
+
                     document.getElementById('answer-btn').style.display = 'none';
                 };
             } else if (!data && pc) { stopCall(); }
@@ -284,21 +315,13 @@
         document.getElementById('call-status-text').innerText = status;
     }
 
-    window.login = async () => {
-        const val = document.getElementById('my-name-input').value.trim();
-        if (val) {
-            myName = val;
-            localStorage.setItem('ktty_user_fixed', myName);
-            const ok = await requestMicPermission();
-            if(ok) init();
-        }
-    };
     window.showFriends = () => {
         if (chatRef) off(chatRef);
         document.getElementById('my-name-tag').innerText = "MY ID: " + myName;
         switchScreen('screen-friends');
         renderFriends();
     };
+
     window.addFriend = () => {
         const input = document.getElementById('friend-name-input');
         const fName = input.value.trim();
@@ -309,6 +332,7 @@
             renderFriends();
         }
     };
+
     function renderFriends() {
         const container = document.getElementById('friend-list-container');
         container.innerHTML = friends.length === 0 ? '<p style="text-align:center;color:#ccc;margin-top:20px;">フレンドがいません</p>' : '';
@@ -320,6 +344,7 @@
             container.appendChild(div);
         });
     }
+
     function openChat(friendName) {
         currentChatFriend = friendName;
         document.getElementById('chat-title').innerText = friendName;
@@ -338,6 +363,7 @@
             container.scrollTop = container.scrollHeight;
         });
     }
+
     window.sendMessage = () => {
         const input = document.getElementById('chat-input');
         const text = input.value.trim();
@@ -347,10 +373,12 @@
             input.value = "";
         }
     };
+
     function switchScreen(id) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(id).classList.add('active');
     }
+
     init();
 </script>
 </body>
